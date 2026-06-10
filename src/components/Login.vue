@@ -4,6 +4,7 @@ import axios from 'axios'
 
 const usuario = ref('')
 const password = ref('')
+const telefono = ref('') // NUEVA VARIABLE PARA EL TELÉFONO
 
 // Variables para controlar la pantalla y mensajes
 const esRegistro = ref(false) // Si es false, muestra Login. Si es true, muestra Registro.
@@ -21,17 +22,26 @@ const procesarFormulario = async () => {
     // -----------------------------------------
     // MODO REGISTRO: Enviamos los datos a Django
     // -----------------------------------------
+    
+    // Validación extra: Obligamos a que pongan su teléfono
+    if (!telefono.value) {
+      mensajeError.value = "Por favor, ingresa tu número de WhatsApp para contactarte si es necesario."
+      return
+    }
+
     try {
-      // Usamos el enlace de PythonAnywhere
+      // Usamos el enlace de PythonAnywhere y enviamos el teléfono
       const respuesta = await axios.post('https://hafidbau.pythonanywhere.com/api/registro/', {
         username: usuario.value,
-        password: password.value
+        password: password.value,
+        telefono: telefono.value // NUEVO CAMPO ENVIADO AL BACKEND
       })
       
       // Si salió bien, mostramos el mensaje y lo regresamos a Iniciar Sesión
       mensajeExito.value = respuesta.data.mensaje
       esRegistro.value = false 
       password.value = '' // Borramos la contraseña por seguridad
+      telefono.value = '' // Borramos el teléfono
       
     } catch (error) {
       // Si hubo un error (ej. el nombre ya existe), lo mostramos
@@ -68,7 +78,18 @@ const procesarFormulario = async () => {
       mensajeError.value = "Por favor ingresa usuario y contraseña"
     }
   }
+}
 
+// NUEVA FUNCIÓN: RECUPERAR CONTRASEÑA POR WHATSAPP
+const recuperarContrasena = () => {
+  if (usuario.value === '') {
+    mensajeError.value = "Escribe tu Usuario en la casilla de arriba y luego presiona aquí para saber quién eres."
+    return
+  }
+  
+  const texto = `Hola Hafid, soy ${usuario.value}. Olvidé mi contraseña de la quiniela, ¿me ayudas a recuperarla?`
+  const url = `https://wa.me/524431205091?text=${encodeURIComponent(texto)}`
+  window.open(url, '_blank')
 }
 </script>
 
@@ -87,6 +108,11 @@ const procesarFormulario = async () => {
           <input type="text" v-model="usuario" placeholder="Ej. Gabo, Isa, Lalo..." required>
         </div>
 
+        <div v-if="esRegistro" class="grupo-input slide-down">
+          <label>Número de WhatsApp</label>
+          <input type="tel" v-model="telefono" placeholder="Ej. 4431234567" required>
+        </div>
+
         <div class="grupo-input">
           <label>Contraseña</label>
           <input type="password" v-model="password" placeholder="••••••••" required>
@@ -96,6 +122,10 @@ const procesarFormulario = async () => {
           {{ esRegistro ? 'REGISTRARME' : 'ENTRAR A LA QUINELA' }}
         </button>
       </form>
+
+      <p v-if="!esRegistro" class="texto-olvido" @click="recuperarContrasena">
+        ¿Olvidaste tu contraseña?
+      </p>
 
       <p class="texto-cambio">
         {{ esRegistro ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?' }}
@@ -221,5 +251,30 @@ const procesarFormulario = async () => {
   background-color: #f8d7da;
   color: #721c24;
   border: 1px solid #f5c6cb;
+}
+
+/* ESTILO DEL NUEVO BOTÓN DE RECUPERACIÓN */
+.texto-olvido {
+  color: #888;
+  margin-top: 15px;
+  margin-bottom: 0;
+  font-size: 0.85em;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color 0.3s ease;
+}
+
+.texto-olvido:hover {
+  color: var(--blanco);
+}
+
+/* Animación suave al abrir el registro */
+.slide-down {
+  animation: deslizar 0.3s ease-out;
+}
+
+@keyframes deslizar {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 </style>
