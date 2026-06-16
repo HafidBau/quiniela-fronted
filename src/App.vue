@@ -60,23 +60,34 @@ const cerrarSesion = () => {
   localStorage.removeItem('quinela_usuario') // Borramos la memoria
 }
 
+// NUEVA FUNCIÓN: Con el "Cero Inteligente" y validación de faltantes
 const guardarTodos = async () => {
-  const pronosticosListos = partidos.value.filter(p => 
-    p.goles_local !== undefined && p.goles_visitante !== undefined && 
-    p.goles_local !== '' && p.goles_visitante !== '' &&
-    !partidoBloqueado(p.fecha)
-  ).map(p => ({
+  const partidosDisponibles = partidos.value.filter(p => !partidoBloqueado(p.fecha))
+
+  // Filtramos los partidos donde el usuario escribió AL MENOS UN NÚMERO.
+  const partidosTocados = partidosDisponibles.filter(p => 
+    (p.goles_local !== undefined && p.goles_local !== '') || 
+    (p.goles_visitante !== undefined && p.goles_visitante !== '')
+  )
+
+  // Inyectamos ceros si dejó alguna casilla en blanco dentro de un partido tocado
+  const pronosticosListos = partidosTocados.map(p => ({
     partido_id: p.id,
-    goles_local: p.goles_local,
-    goles_visitante: p.goles_visitante
+    goles_local: (p.goles_local === '' || p.goles_local === undefined) ? 0 : p.goles_local,
+    goles_visitante: (p.goles_visitante === '' || p.goles_visitante === undefined) ? 0 : p.goles_visitante
   }))
 
   if (pronosticosListos.length === 0) {
-    alert("⚽ No hay pronósticos nuevos o válidos para guardar.")
+    alert("⚽ No hay pronósticos nuevos para guardar.")
     return
   }
 
-  enviando.value = true // Encendemos animación de carga
+  if (pronosticosListos.length < partidosDisponibles.length) {
+    const seguro = confirm(`⚠️ ¡Espera! Solo llenaste ${pronosticosListos.length} de ${partidosDisponibles.length} partidos disponibles.\n\n¿Estás seguro de que quieres guardar y dejar el resto sin predecir?`)
+    if (!seguro) return
+  }
+
+  enviando.value = true
 
   try {
     const respuesta = await axios.post('https://hafidbau.pythonanywhere.com/api/guardar_todos/', {
@@ -138,7 +149,6 @@ const cargarTabla = async () => {
   }
 }
 
-// Va a Django por las predicciones de los demás
 const verPredicciones = async (partido) => {
   try {
     const respuesta = await axios.get(`https://hafidbau.pythonanywhere.com/api/predicciones/${partido.id}/`)
@@ -158,7 +168,7 @@ const cerrarModal = () => {
 onMounted(() => {
   const usuarioGuardado = localStorage.getItem('quinela_usuario')
   if (usuarioGuardado) {
-    entrarAlSistema(usuarioGuardado) // Login automático si hay sesión guardada
+    entrarAlSistema(usuarioGuardado) 
   }
 })
 </script>
@@ -186,46 +196,52 @@ onMounted(() => {
       <div v-else>
         
         <div class="lista-partidos">
-          <div v-for="partido in partidos" :key="partido.id" class="tarjeta-partido">
+          <template v-for="(partido, index) in partidos" :key="partido.id">
             
-            <div class="cinta-fecha" :style="partidoBloqueado(partido.fecha) ? 'background-color: #8b0000;' : ''">
-              <span>{{ new Date(partido.fecha).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'}) }}</span>
-              <span v-if="partidoBloqueado(partido.fecha)"> 🔒 CERRADO</span>
+            <div v-if="index === 0 || partido.jornada !== partidos[index - 1].jornada" class="separador-jornada">
+              🏆 JORNADA {{ partido.jornada || 1 }}
             </div>
-            
-            <div class="marcador-container">
-              <div class="equipo">
-                <span class="bandera">{{ obtenerBandera(partido.equipo_local.nombre) }}</span>
-                <span class="nombre-pais">{{ partido.equipo_local.nombre }}</span>
+
+            <div class="tarjeta-partido">
+              <div class="cinta-fecha" :style="partidoBloqueado(partido.fecha) ? 'background-color: #8b0000;' : ''">
+                <span>{{ new Date(partido.fecha).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'}) }}</span>
+                <span v-if="partidoBloqueado(partido.fecha)"> 🔒 CERRADO</span>
               </div>
               
-              <div class="inputs-goles">
-                <input type="number" min="0" placeholder="0" class="input-gol" 
-                       v-model="partido.goles_local" 
-                       :disabled="!modoEdicion || partidoBloqueado(partido.fecha)" 
-                       :class="{'input-bloqueado': !modoEdicion || partidoBloqueado(partido.fecha)}">
+              <div class="marcador-container">
+                <div class="equipo">
+                  <span class="bandera">{{ obtenerBandera(partido.equipo_local.nombre) }}</span>
+                  <span class="nombre-pais">{{ partido.equipo_local.nombre }}</span>
+                </div>
                 
-                <span class="vs">vs</span>
-                
-                <input type="number" min="0" placeholder="0" class="input-gol" 
-                       v-model="partido.goles_visitante" 
-                       :disabled="!modoEdicion || partidoBloqueado(partido.fecha)"
-                       :class="{'input-bloqueado': !modoEdicion || partidoBloqueado(partido.fecha)}">
+                <div class="inputs-goles">
+                  <input type="number" min="0" placeholder="-" class="input-gol" 
+                         v-model="partido.goles_local" 
+                         :disabled="!modoEdicion || partidoBloqueado(partido.fecha)" 
+                         :class="{'input-bloqueado': !modoEdicion || partidoBloqueado(partido.fecha)}">
+                  
+                  <span class="vs">vs</span>
+                  
+                  <input type="number" min="0" placeholder="-" class="input-gol" 
+                         v-model="partido.goles_visitante" 
+                         :disabled="!modoEdicion || partidoBloqueado(partido.fecha)"
+                         :class="{'input-bloqueado': !modoEdicion || partidoBloqueado(partido.fecha)}">
+                </div>
+
+                <div class="equipo">
+                  <span class="bandera">{{ obtenerBandera(partido.equipo_visitante.nombre) }}</span>
+                  <span class="nombre-pais">{{ partido.equipo_visitante.nombre }}</span>
+                </div>
               </div>
 
-              <div class="equipo">
-                <span class="bandera">{{ obtenerBandera(partido.equipo_visitante.nombre) }}</span>
-                <span class="nombre-pais">{{ partido.equipo_visitante.nombre }}</span>
+              <div v-if="partidoBloqueado(partido.fecha)" style="padding: 10px; border-top: 1px solid #eee; text-align: center;">
+                <button class="btn-ver-predicciones" @click="verPredicciones(partido)">
+                  👁️ Ver predicciones de todos
+                </button>
               </div>
-            </div>
 
-            <div v-if="partidoBloqueado(partido.fecha)" style="padding: 10px; border-top: 1px solid #eee; text-align: center;">
-              <button class="btn-ver-predicciones" @click="verPredicciones(partido)">
-                👁️ Ver predicciones de todos
-              </button>
             </div>
-
-          </div>
+          </template>
         </div> 
         
         <div class="contenedor-botones-inferior">
@@ -326,6 +342,24 @@ body { background-color: #f4f7f6; margin: 0; }
 .equipo { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 1.1em; color: var(--negro-fifa); text-align: center; }
 .bandera { font-size: 2.2em; line-height: 1; }
 
+/* ESTILO DEL SEPARADOR DE JORNADA (NUEVO) */
+.separador-jornada {
+  grid-column: 1 / -1; 
+  background: linear-gradient(135deg, var(--verde-oscuro), var(--negro-fifa));
+  color: var(--verde-neon);
+  text-align: center;
+  padding: 15px;
+  font-size: 1.5em;
+  font-weight: bold;
+  letter-spacing: 3px;
+  border-radius: 10px;
+  margin-top: 20px;
+  margin-bottom: 5px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  border-left: 5px solid var(--verde-neon);
+  border-right: 5px solid var(--verde-neon);
+}
+
 /* Inputs de goles */
 .inputs-goles { display: flex; align-items: center; gap: 8px; background: var(--gris-fondo); padding: 10px; border-radius: 15px; }
 .input-gol { width: 45px; height: 45px; text-align: center; font-size: 1.4em; font-weight: bold; border: 2px solid #ccc; border-radius: 8px; background: var(--blanco); color: var(--negro-fifa); }
@@ -374,34 +408,11 @@ body { background-color: #f4f7f6; margin: 0; }
 
 /* --- AJUSTES PARA PANTALLAS DE CELULARES --- */
 @media (max-width: 450px) {
-  /* Reducimos el espacio a los lados para aprovechar toda la pantalla */
-  .marcador-container { 
-    padding: 15px 5px; 
-  }
-  
-  /* Hacemos la letra de los países un poco más pequeña */
-  .equipo { 
-    font-size: 0.85em; 
-    gap: 5px; 
-  }
-  
-  /* Achicamos un poco las banderas */
-  .bandera { 
-    font-size: 1.8em; 
-  }
-  
-  /* Hacemos los cuadritos de los goles ligeramente más pequeños */
-  .input-gol { 
-    width: 38px; 
-    height: 38px; 
-    font-size: 1.2em; 
-  }
-  
-  /* Juntamos un poco más los inputs con el "vs" */
-  .inputs-goles { 
-    padding: 6px; 
-    gap: 5px; 
-  }
+  .marcador-container { padding: 15px 5px; }
+  .equipo { font-size: 0.85em; gap: 5px; }
+  .bandera { font-size: 1.8em; }
+  .input-gol { width: 38px; height: 38px; font-size: 1.2em; }
+  .inputs-goles { padding: 6px; gap: 5px; }
 }
 
 /* --- BOTÓN DE WHATSAPP FLOTANTE --- */
@@ -409,7 +420,7 @@ body { background-color: #f4f7f6; margin: 0; }
   position: fixed;
   bottom: 25px;
   right: 25px;
-  background-color: #25D366; /* Verde oficial de WhatsApp */
+  background-color: #25D366; 
   color: #ffffff;
   padding: 12px 20px;
   border-radius: 50px;
@@ -418,7 +429,7 @@ body { background-color: #f4f7f6; margin: 0; }
   font-family: Arial, sans-serif;
   font-size: 1.1em;
   box-shadow: 0 5px 15px rgba(37, 211, 102, 0.4);
-  z-index: 10000; /* Asegura que flote sobre todo lo demás */
+  z-index: 10000;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -430,7 +441,6 @@ body { background-color: #f4f7f6; margin: 0; }
   background-color: #1ebe5d;
 }
 
-/* Ajuste para que en celular no estorbe tanto */
 @media (max-width: 600px) {
   .btn-whatsapp {
     bottom: 15px;
