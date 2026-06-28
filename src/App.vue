@@ -3,16 +3,14 @@ import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import Login from './components/Login.vue'
 
-// Variables de estado general
 const sesionIniciada = ref(false)
 const nombreUsuario = ref('')
 const partidos = ref([])
 const cargando = ref(true)
 const tablaPuntuaciones = ref([])
 const modoEdicion = ref(true) 
-const enviando = ref(false) // Controla la pantalla de "Guardando..."
+const enviando = ref(false) 
 
-// Variables para la ventana espía de predicciones
 const prediccionesModal = ref([])
 const mostrandoPredicciones = ref(false)
 const partidoViendo = ref({ local: '', visitante: '' })
@@ -33,18 +31,35 @@ const banderas = {
 }
 const obtenerBandera = (pais) => banderas[pais] || '🏳️'
 
-// Verifica si el partido ya pasó de las 0:00 hrs de su día
+// NUEVA FUNCIÓN: Traductor de números a Fases Eliminatorias
+const obtenerNombreFase = (num) => {
+  const fases = {
+    1: 'JORNADA 1',
+    2: 'JORNADA 2',
+    3: 'JORNADA 3',
+    4: '16VOS DE FINAL',
+    5: 'OCTAVOS DE FINAL',
+    6: 'CUARTOS DE FINAL',
+    7: 'SEMIFINALES',
+    8: 'TERCER LUGAR',
+    9: 'GRAN FINAL'
+  }
+  return fases[num] || `JORNADA ${num}`
+}
+
+// NUEVA REGLA DE BLOQUEO: Exactamente 30 minutos antes de empezar
 const partidoBloqueado = (fechaPartido) => {
-  const hoy = new Date()
-  const fechaLimite = new Date(fechaPartido)
-  fechaLimite.setHours(0, 0, 0, 0)
-  return hoy >= fechaLimite
+  const ahora = new Date()
+  const fechaPartidoObj = new Date(fechaPartido)
+  // Restamos 30 minutos (30 * 60 segundos * 1000 milisegundos) a la hora del partido
+  const limite = new Date(fechaPartidoObj.getTime() - (30 * 60 * 1000))
+  return ahora >= limite
 }
 
 const entrarAlSistema = async (usuario) => {
   nombreUsuario.value = usuario
   sesionIniciada.value = true
-  localStorage.setItem('quinela_usuario', usuario) // Guardamos en memoria
+  localStorage.setItem('quinela_usuario', usuario)
   
   await obtenerPartidos() 
   await cargarMisPronosticos() 
@@ -57,20 +72,17 @@ const cerrarSesion = () => {
   partidos.value = [] 
   tablaPuntuaciones.value = []
   modoEdicion.value = true 
-  localStorage.removeItem('quinela_usuario') // Borramos la memoria
+  localStorage.removeItem('quinela_usuario')
 }
 
-// NUEVA FUNCIÓN: Con el "Cero Inteligente" y validación de faltantes
 const guardarTodos = async () => {
   const partidosDisponibles = partidos.value.filter(p => !partidoBloqueado(p.fecha))
 
-  // Filtramos los partidos donde el usuario escribió AL MENOS UN NÚMERO.
   const partidosTocados = partidosDisponibles.filter(p => 
     (p.goles_local !== undefined && p.goles_local !== '') || 
     (p.goles_visitante !== undefined && p.goles_visitante !== '')
   )
 
-  // Inyectamos ceros si dejó alguna casilla en blanco dentro de un partido tocado
   const pronosticosListos = partidosTocados.map(p => ({
     partido_id: p.id,
     goles_local: (p.goles_local === '' || p.goles_local === undefined) ? 0 : p.goles_local,
@@ -198,8 +210,9 @@ onMounted(() => {
         <div class="lista-partidos">
           <template v-for="(partido, index) in partidos" :key="partido.id">
             
+            <!-- EL SEPARADOR VISUAL CON EL TRADUCTOR -->
             <div v-if="index === 0 || partido.jornada !== partidos[index - 1].jornada" class="separador-jornada">
-              🏆 JORNADA {{ partido.jornada || 1 }}
+              🏆 {{ obtenerNombreFase(partido.jornada || 1) }}
             </div>
 
             <div class="tarjeta-partido">
@@ -342,7 +355,7 @@ body { background-color: #f4f7f6; margin: 0; }
 .equipo { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 1.1em; color: var(--negro-fifa); text-align: center; }
 .bandera { font-size: 2.2em; line-height: 1; }
 
-/* ESTILO DEL SEPARADOR DE JORNADA (NUEVO) */
+/* ESTILO DEL SEPARADOR DE JORNADA (TRADUCIDO) */
 .separador-jornada {
   grid-column: 1 / -1; 
   background: linear-gradient(135deg, var(--verde-oscuro), var(--negro-fifa));
@@ -366,7 +379,7 @@ body { background-color: #f4f7f6; margin: 0; }
 .input-gol:focus { outline: none; border-color: var(--verde-neon); box-shadow: 0 0 8px rgba(24, 255, 76, 0.3); }
 .input-bloqueado { background-color: #e9ecef; color: #6c757d; border-color: #ced4da; cursor: not-allowed; }
 
-/* Botones inferiores (Guardar/Editar) */
+/* Botones inferiores */
 .contenedor-botones-inferior { text-align: center; margin-top: 40px; margin-bottom: 60px; display: flex; justify-content: center; }
 .btn-guardar { width: 100%; max-width: 350px; background-color: var(--verde-neon); color: var(--negro-fifa); border: none; padding: 15px; font-size: 1.1em; font-weight: bold; cursor: pointer; transition: 0.3s ease; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,255,100,0.3); }
 .btn-guardar:hover { background-color: var(--rojo-hover); color: var(--blanco); }
@@ -393,7 +406,6 @@ body { background-color: #f4f7f6; margin: 0; }
 .subtexto-carga { color: #666; margin: 0; font-family: Arial, sans-serif; font-size: 1em; }
 @keyframes palpitar { 0% { transform: scale(1); } 100% { transform: scale(1.2); } }
 
-/* Botón y Ventana Espía */
 .btn-ver-predicciones { width: 100%; background: #e0e7ff; color: #3730a3; border: none; padding: 10px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; }
 .btn-ver-predicciones:hover { background: #c7d2fe; }
 .caja-modal { background: var(--blanco); width: 90%; max-width: 400px; border-radius: 15px; padding: 25px; position: relative; box-shadow: 0 10px 25px rgba(0,0,0,0.5); text-align: center; font-family: Arial, sans-serif; }
@@ -406,7 +418,6 @@ body { background-color: #f4f7f6; margin: 0; }
 .nombre-espia { font-weight: bold; color: var(--negro-fifa); }
 .marcador-espia { font-weight: bold; color: var(--verde-oscuro); font-size: 1.2em; background: #e5e7eb; padding: 2px 10px; border-radius: 6px; text-align: center; min-width: 60px; }
 
-/* --- AJUSTES PARA PANTALLAS DE CELULARES --- */
 @media (max-width: 450px) {
   .marcador-container { padding: 15px 5px; }
   .equipo { font-size: 0.85em; gap: 5px; }
@@ -415,7 +426,6 @@ body { background-color: #f4f7f6; margin: 0; }
   .inputs-goles { padding: 6px; gap: 5px; }
 }
 
-/* --- BOTÓN DE WHATSAPP FLOTANTE --- */
 .btn-whatsapp {
   position: fixed;
   bottom: 25px;
