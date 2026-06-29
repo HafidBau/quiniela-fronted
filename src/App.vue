@@ -191,6 +191,10 @@ onMounted(() => {
       <h1 class="titulo">FIFA WORLD CUP 26™</h1>
       <h2 class="subtitulo" v-if="sesionIniciada">QUINELA DE {{ nombreUsuario.toUpperCase() }}</h2>
       <h2 class="subtitulo" v-else>QUINELA OFICIAL</h2>
+
+      <p class="nota-regla">
+        ⚠️ <strong>Nota:</strong> Los pronósticos solo aplican para el resultado en los <strong>90 minutos reglamentarios</strong> (no cuentan tiempos extras ni penales).
+      </p>
       
       <button v-if="sesionIniciada" class="btn-salir" @click="cerrarSesion">
         🚪 Salir
